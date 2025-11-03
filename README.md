@@ -38,3 +38,5 @@ Setup worker secret HBBS_RELAY_URL = 'wss://your-worker-url' on cloudflare dashb
 
 Enable Use Websocket on rustdesk Network setting, set ID/Relay Server to your-worker-url,
 Set Api Server to https://localhost to enable wss connection
+
+Goto https://rustdesk.com/web/ set Network setting to your-worker-url, control your desk by web
