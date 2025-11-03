@@ -1,71 +1,30 @@
-import { DurableObject } from "cloudflare:workers";
+import { Hono } from 'hono'
+import { Hbbs as Hbbs_, Hbbr as Hbbr_ } from './hbbs'
 
-/**
- * Welcome to Cloudflare Workers! This is your first Durable Objects application.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your Durable Object in action
- * - Run `npm run deploy` to publish your application
- *
- * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/durable-objects
- */
+export class Hbbs extends Hbbs_ { }
+export class Hbbr extends Hbbr_ { }
 
-/** A Durable Object's behavior is defined in an exported Javascript class */
-export class MyDurableObject extends DurableObject<Env> {
-	/**
-	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
-	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
-	 *
-	 * @param ctx - The interface for interacting with Durable Object state
-	 * @param env - The interface to reference bindings declared in wrangler.jsonc
-	 */
-	constructor(ctx: DurableObjectState, env: Env) {
-		super(ctx, env);
-	}
-
-	/**
-	 * The Durable Object exposes an RPC method sayHello which will be invoked when a Durable
-	 *  Object instance receives a request from a Worker via the same method invocation on the stub
-	 *
-	 * @returns The greeting to be sent back to the Worker
-	 */
-	async sayHello(): Promise<string> {
-		let result = this.ctx.storage.sql
-			.exec("SELECT 'Hello, World!' as greeting")
-			.one() as { greeting: string };
-		return result.greeting;
-	}
+type Bindings = {
+  HBBS: DurableObjectNamespace<Hbbs>
+  HBBR: DurableObjectNamespace<Hbbr>
 }
 
-export default {
-	/**
-	 * This is the standard fetch handler for a Cloudflare Worker
-	 *
-	 * @param request - The request submitted to the Worker from the client
-	 * @param env - The interface to reference bindings declared in wrangler.jsonc
-	 * @param ctx - The execution context of the Worker
-	 * @returns The response to be sent back to the client
-	 */
-	async fetch(request, env, ctx): Promise<Response> {
-		// Create a `DurableObjectId` for an instance of the `MyDurableObject`
-		// class. The name of class is used to identify the Durable Object.
-		// Requests from all Workers to the instance named
-		// will go to a single globally unique Durable Object instance.
-		const id: DurableObjectId = env.MY_DURABLE_OBJECT.idFromName(
-			new URL(request.url).pathname,
-		);
+const app = new Hono<{ Bindings: Bindings }>()
 
-		// Create a stub to open a communication channel with the Durable
-		// Object instance.
-		const stub = env.MY_DURABLE_OBJECT.get(id);
+app.get('/ws/id', async (c) => {
+  const hbbsId = c.env.HBBS.idFromName('hbbs')
+  const hbbsObj = c.env.HBBS.get(hbbsId)
+  return hbbsObj.fetch(c.req.raw)
+})
 
-		// Call the `sayHello()` RPC method on the stub to invoke the method on
-		// the remote Durable Object instance
-		const greeting = await stub.sayHello();
+app.get('/ws/relay/:session', async (c) => {
+  const session = c.req.param('session')
+  if (!session?.length) {
+    return c.text('invalid request', 400)
+  }
+  const hbbrId = c.env.HBBR.idFromName(session)
+  const hbbrObj = c.env.HBBR.get(hbbrId)
+  return hbbrObj.fetch(c.req.raw)
+})
 
-		return new Response(greeting);
-	},
-} satisfies ExportedHandler<Env>;
+export default app

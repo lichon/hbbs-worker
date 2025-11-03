@@ -11,7 +11,8 @@
 	"migrations": [
 		{
 			"new_sqlite_classes": [
-				"MyDurableObject"
+				"Hbbr",
+				"Hbbs",
 			],
 			"tag": "v1"
 		}
@@ -19,8 +20,12 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "MyDurableObject",
-				"name": "MY_DURABLE_OBJECT"
+				"class_name": "Hbbr",
+				"name": "HBBR"
+			},
+			{
+				"class_name": "Hbbs",
+				"name": "HBBS"
 			}
 		]
 	},
