@@ -41,11 +41,13 @@ export class Hbbr extends DurableObject {
       // console.log(`rendezvous relay received ${message.byteLength}`, msg)
       switch (msg.union?.oneofKind) {
         case 'requestRelay':
-          this.handleRelayRequest(msg.union.requestRelay, socket)
+          this.handleRequestRelay(msg.union.requestRelay, socket)
           break
         default:
           console.log(`unsupported relay msg type: ${msg.union?.oneofKind}`)
       }
+    } else {
+      socket.close()
     }
   }
 
@@ -59,7 +61,7 @@ export class Hbbr extends DurableObject {
     }
   }
 
-  handleRelayRequest(req: rendezvous.RequestRelay, socket: WebSocket) {
+  handleRequestRelay(req: rendezvous.RequestRelay, socket: WebSocket) {
     if (!this.initiator) {
       this.initiator = socket
       console.log(`setup initiator relay request uuid: ${req.uuid}`)
@@ -256,9 +258,13 @@ export class Hbbs extends DurableObject {
     if (!peerId) {
       return
     }
-    // TODO fill up online peers states
-    const states = new Uint8Array(req.peers.length)
-    states.fill(0)
+    const states = new Uint8Array(Math.ceil(req.peers.length / 8))
+    for (let i = 0; i < req.peers.length; i++) {
+      const online = this.sessions.has(req.peers[i])
+      if (online) {
+        states[i / 8] |= (0x01 << (7 - i % 8))
+      }
+    }
     this.sendRendezvous({
       onlineResponse: rendezvous.OnlineResponse.create({
         states
