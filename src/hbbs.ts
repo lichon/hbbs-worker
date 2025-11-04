@@ -245,7 +245,7 @@ export class Hbbs extends DurableObject {
     this.sendRendezvous({
       registerPkResponse: rendezvous.RegisterPkResponse.create({
         result: 0,
-        keepAlive: 3600,
+        keepAlive: 60,
       })
     }, socket)
   }
