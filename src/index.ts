@@ -27,4 +27,9 @@ app.get('/ws/relay/:session', async (c) => {
   return hbbrObj.fetch(c.req.raw)
 })
 
+app.all('/api/*', async (c) => {
+  // TODO: implement some apis
+  return c.json({}, 404)
+})
+
 export default app
