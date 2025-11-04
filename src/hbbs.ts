@@ -146,10 +146,18 @@ export class Hbbs extends DurableObject {
       }
       return
     }
+    // close the connection for unsupported message type
+    ws.close()
   }
 
   // client closes the connection, the runtime will invoke the webSocketClose() handler.
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
+    ws.deserializeAttachment()
+    const meta = ws.deserializeAttachment()
+    if (meta) {
+      this.sessions.delete(meta.id)
+      console.log(`rendezvous client closed id: ${meta.id} uuid: ${meta.uuid}`)
+    }
     ws.close(code, "client closed")
   }
 
