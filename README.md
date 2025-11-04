@@ -1,4 +1,12 @@
-# Durable Objects Starter
+# Rustdesk serverless server
+
+Setup worker secret HBBS_RELAY_URL = 'wss://your-worker-url' on cloudflare dashboard
+
+Enable 'Use Websocket' on rustdesk Network setting, set ID/Relay Server to your-worker-url,
+
+Set Api Server to https://localhost to enable wss connection
+
+Goto https://rustdesk.com/web/ set Network setting to your-worker-url, control your desk by web
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lichon/hbbs-worker)
 
@@ -34,9 +42,3 @@ npm run dev
 | `npm run deploy`    | Deploy your application to Cloudflare |
 | `npm wrangler tail` | View real-time logs for all Workers   |
 
-Setup worker secret HBBS_RELAY_URL = 'wss://your-worker-url' on cloudflare dashboard
-
-Enable Use Websocket on rustdesk Network setting, set ID/Relay Server to your-worker-url,
-Set Api Server to https://localhost to enable wss connection
-
-Goto https://rustdesk.com/web/ set Network setting to your-worker-url, control your desk by web
