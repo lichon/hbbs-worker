@@ -236,6 +236,7 @@ export class Hbbs extends DurableObject {
       return
     }
     // generate random 128 bit for socket address
+    // fix issue with rustdesk skip duplicate relay request messages from 0.0.0.0:0
     const random64 = crypto.getRandomValues(new Uint8Array(8))
     const random64Next = crypto.getRandomValues(new Uint8Array(8))
     const last32bit = new Uint8Array(4).fill(0)
