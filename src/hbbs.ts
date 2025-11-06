@@ -102,10 +102,13 @@ export class Hbbr extends DurableObject {
 export class Hbbs extends DurableObject {
   // In-memory state
   sessions: Map<string, {
+    ip: string,
     id: string,
     uuid: string,
     socket: WebSocket,
   }> = new Map()
+
+  socketsAddress: Map<WebSocket, string> = new Map()
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -129,7 +132,7 @@ export class Hbbs extends DurableObject {
     })
   }
 
-  async fetch(_req: Request): Promise<Response> {
+  async fetch(req: Request): Promise<Response> {
     // console.log(`hbbs fetch ${req.url}`)
     // Creates two ends of a WebSocket connection.
     const webSocketPair = new WebSocketPair()
@@ -139,6 +142,8 @@ export class Hbbs extends DurableObject {
     // Unlike `ws.accept()`, `state.acceptWebSocket(ws)` allows the Durable Object to be hibernated
     // When the Durable Object receives a message during Hibernation, it will run the `constructor` to be re-initialized
     this.ctx.acceptWebSocket(server)
+    this.socketsAddress.set(server, req.headers.get('cf-connecting-ip') || '')
+    this.socketsAddress.set(client, req.headers.get('cf-connecting-ip') || '')
 
     return new Response(null, {
       status: 101,
@@ -230,11 +235,20 @@ export class Hbbs extends DurableObject {
       }, socket)
       return
     }
+    // generate random 128 bit for socket address
+    const random64 = crypto.getRandomValues(new Uint8Array(8))
+    const random64Next = crypto.getRandomValues(new Uint8Array(8))
+    const last32bit = new Uint8Array(4).fill(0)
+    const random128bit = new Uint8Array(16)
+    random128bit.set(random64, 0)
+    random128bit.set(random64Next, 8)
+    random128bit.set(last32bit, 12)
 
     const relayUrl = (this.env as { HBBS_RELAY_URL?: string }).HBBS_RELAY_URL || 'ws://localhost'
     const uuid = crypto.randomUUID()
     this.sendRendezvous({
       requestRelay: rendezvous.RequestRelay.create({
+        socketAddr: random128bit,
         id: targetId,
         uuid: uuid,
         relayServer: `${relayUrl}/ws/relay/${uuid}`,
@@ -257,11 +271,14 @@ export class Hbbs extends DurableObject {
       socket.close()
       return
     }
+    const meta = socket.deserializeAttachment()
     socket.serializeAttachment({
+      ip: meta?.ip || '',
       id: peerId,
       uuid: peerUuid,
     })
     this.sessions.set(peerId, {
+      ip: meta?.ip || '',
       id: peerId,
       uuid: peerUuid,
       socket: socket
