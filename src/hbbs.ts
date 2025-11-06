@@ -72,7 +72,7 @@ export class Hbbr extends DurableObject {
   handleRequestRelay(req: rendezvous.RequestRelay, socket: WebSocket) {
     if (!this.initiator) {
       this.initiator = socket
-      console.log(`setup initiator relay request uuid: ${req.uuid}`)
+      console.log(`setup initiator for uuid: ${req.uuid} cached msg: ${this.cachedMessagesFromAcceptor.length}`)
       if (this.cachedMessagesFromAcceptor.length > 0) {
         // send cached messages to accaptor
         for (const msg of this.cachedMessagesFromAcceptor) {
@@ -87,7 +87,7 @@ export class Hbbr extends DurableObject {
     }
     if (!this.accaptor) {
       this.accaptor = socket
-      console.log(`setup accaptor relay request uuid: ${req.uuid}`)
+      console.log(`setup accaptor for uuid: ${req.uuid} cached msg: ${this.cachedMessagesFromInit.length}`)
       if (this.cachedMessagesFromInit.length > 0) {
         // send cached messages to accaptor
         for (const msg of this.cachedMessagesFromInit) {
