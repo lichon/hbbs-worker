@@ -5,6 +5,7 @@ export class Hbbr extends DurableObject {
   // In-memory state
   initiator: WebSocket | undefined
   accaptor: WebSocket | undefined
+  cachedMessages: Array<string | ArrayBuffer> = []
 
   async fetch(_req: Request): Promise<Response> {
     // console.log(`hbbr fetch ${req.url}`)
@@ -24,6 +25,9 @@ export class Hbbr extends DurableObject {
       // message from initiator, forward to acceptor
       if (this.accaptor && this.accaptor.readyState === 1) {
         this.accaptor.send(message)
+      } else {
+        // cache the message until accaptor is ready
+        this.cachedMessages.push(message)
       }
       return
     }
@@ -73,6 +77,13 @@ export class Hbbr extends DurableObject {
     if (!this.accaptor) {
       this.accaptor = socket
       console.log(`setup accaptor relay request uuid: ${req.uuid}`)
+      if (this.cachedMessages.length > 0) {
+        // send cached messages to accaptor
+        for (const msg of this.cachedMessages) {
+          this.accaptor.send(msg)
+        }
+        this.cachedMessages = []
+      }
     }
   }
 }
