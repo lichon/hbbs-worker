@@ -5,7 +5,8 @@ export class Hbbr extends DurableObject {
   // In-memory state
   initiator: WebSocket | undefined
   accaptor: WebSocket | undefined
-  cachedMessages: Array<string | ArrayBuffer> = []
+  cachedMessagesFromInit: Array<string | ArrayBuffer> = []
+  cachedMessagesFromAcceptor: Array<string | ArrayBuffer> = []
 
   async fetch(_req: Request): Promise<Response> {
     // console.log(`hbbr fetch ${req.url}`)
@@ -27,7 +28,7 @@ export class Hbbr extends DurableObject {
         this.accaptor.send(message)
       } else {
         // cache the message until accaptor is ready
-        this.cachedMessages.push(message)
+        this.cachedMessagesFromInit.push(message)
       }
       return
     }
@@ -35,6 +36,9 @@ export class Hbbr extends DurableObject {
       // message from acceptor, forward to initiator
       if (this.initiator && this.initiator.readyState === 1) {
         this.initiator.send(message)
+      } else {
+        // cache the message until initiator is ready
+        this.cachedMessagesFromAcceptor.push(message)
       }
       return
     }
@@ -69,6 +73,13 @@ export class Hbbr extends DurableObject {
     if (!this.initiator) {
       this.initiator = socket
       console.log(`setup initiator relay request uuid: ${req.uuid}`)
+      if (this.cachedMessagesFromAcceptor.length > 0) {
+        // send cached messages to accaptor
+        for (const msg of this.cachedMessagesFromAcceptor) {
+          this.initiator.send(msg)
+        }
+        this.cachedMessagesFromAcceptor = []
+      }
       return
     }
     if (this.initiator === socket) {
@@ -77,12 +88,12 @@ export class Hbbr extends DurableObject {
     if (!this.accaptor) {
       this.accaptor = socket
       console.log(`setup accaptor relay request uuid: ${req.uuid}`)
-      if (this.cachedMessages.length > 0) {
+      if (this.cachedMessagesFromInit.length > 0) {
         // send cached messages to accaptor
-        for (const msg of this.cachedMessages) {
+        for (const msg of this.cachedMessagesFromInit) {
           this.accaptor.send(msg)
         }
-        this.cachedMessages = []
+        this.cachedMessagesFromInit = []
       }
     }
   }
