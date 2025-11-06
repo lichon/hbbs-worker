@@ -108,8 +108,6 @@ export class Hbbs extends DurableObject {
     socket: WebSocket,
   }> = new Map()
 
-  socketsAddress: Map<WebSocket, string> = new Map()
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
 
@@ -142,8 +140,6 @@ export class Hbbs extends DurableObject {
     // Unlike `ws.accept()`, `state.acceptWebSocket(ws)` allows the Durable Object to be hibernated
     // When the Durable Object receives a message during Hibernation, it will run the `constructor` to be re-initialized
     this.ctx.acceptWebSocket(server)
-    this.socketsAddress.set(server, req.headers.get('cf-connecting-ip') || '')
-    this.socketsAddress.set(client, req.headers.get('cf-connecting-ip') || '')
 
     return new Response(null, {
       status: 101,
