@@ -242,7 +242,9 @@ export class Hbbs extends DurableObject {
     random128bit.set(last32bit, 12)
 
     const relayUrl = (this.env as { HBBS_RELAY_URL?: string }).HBBS_RELAY_URL || 'ws://localhost'
-    const uuid = crypto.randomUUID()
+    // const uuid = crypto.randomUUID()
+    // pre-warm DO, make sure both side connect to the same region's DO, reduce connection time
+    const uuid = this.env.HBBR.newUniqueId().toString() // pre-warm DO
     this.sendRendezvous({
       requestRelay: rendezvous.RequestRelay.create({
         socketAddr: random128bit,

@@ -31,6 +31,9 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	"dev": {
+		"port": 80
 	}
 	/**
 	 * Smart Placement

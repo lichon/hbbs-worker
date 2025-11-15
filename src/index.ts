@@ -22,7 +22,7 @@ app.get('/ws/relay/:session', async (c) => {
   if (!session?.length) {
     return c.text('invalid request', 400)
   }
-  const hbbrId = c.env.HBBR.idFromName(session)
+  const hbbrId = c.env.HBBR.idFromString(session)
   const hbbrObj = c.env.HBBR.get(hbbrId)
   return hbbrObj.fetch(c.req.raw)
 })
