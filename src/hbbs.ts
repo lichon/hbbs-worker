@@ -8,6 +8,10 @@ export class Hbbr extends DurableObject {
   cachedMessagesFromInit: Array<string | ArrayBuffer> = []
   cachedMessagesFromAcceptor: Array<string | ArrayBuffer> = []
 
+  async warmup(): Promise<void> {
+    console.log(`Hbbr warmup called`)
+  }
+
   async fetch(_req: Request): Promise<Response> {
     // console.log(`hbbr fetch ${req.url}`)
     // Creates two ends of a WebSocket connection.
@@ -244,7 +248,10 @@ export class Hbbs extends DurableObject {
     const relayUrl = (this.env as { HBBS_RELAY_URL?: string }).HBBS_RELAY_URL || 'ws://localhost'
     // const uuid = crypto.randomUUID()
     // pre-warm DO, make sure both side connect to the same region's DO, reduce connection time
-    const uuid = this.env.HBBR.newUniqueId().toString() // pre-warm DO
+    const hbbrObjId = this.env.HBBR.newUniqueId()
+    this.env.HBBR.get(hbbrObjId).warmup()
+    const uuid = hbbrObjId.toString()
+
     this.sendRendezvous({
       requestRelay: rendezvous.RequestRelay.create({
         socketAddr: random128bit,
