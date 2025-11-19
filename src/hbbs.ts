@@ -1,10 +1,11 @@
 import { DurableObject } from 'cloudflare:workers'
 import * as rendezvous from './hbbs-rendezvous'
+// import * as deskMsg from './hbbs-message'
 
 export class Hbbr extends DurableObject {
   // In-memory state
   initiator: WebSocket | undefined
-  accaptor: WebSocket | undefined
+  acceptor: WebSocket | undefined
   cachedMessagesFromInit: Array<string | ArrayBuffer> = []
   cachedMessagesFromAcceptor: Array<string | ArrayBuffer> = []
 
@@ -27,16 +28,24 @@ export class Hbbr extends DurableObject {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     if (this.initiator === socket) {
+      // const msg = deskMsg.Message.fromBinary(new Uint8Array(message as ArrayBuffer))
+      // if (msg.union?.oneofKind !== 'testDelay') {
+      //   console.log(`message from initiator: ${msg.union?.oneofKind}`, msg.union)
+      // }
       // message from initiator, forward to acceptor
-      if (this.accaptor && this.accaptor.readyState === 1) {
-        this.accaptor.send(message)
+      if (this.acceptor && this.acceptor.readyState === 1) {
+        this.acceptor.send(message)
       } else {
         // cache the message until accaptor is ready
         this.cachedMessagesFromInit.push(message)
       }
       return
     }
-    if (this.accaptor === socket) {
+    if (this.acceptor === socket) {
+      // const msg = deskMsg.Message.fromBinary(new Uint8Array(message as ArrayBuffer))
+      // if (msg.union?.oneofKind !== 'testDelay') {
+      //   console.log(`message from acceptor: ${msg.union?.oneofKind}`, msg.union)
+      // }
       // message from acceptor, forward to initiator
       if (this.initiator && this.initiator.readyState === 1) {
         this.initiator.send(message)
@@ -64,12 +73,15 @@ export class Hbbr extends DurableObject {
   }
 
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
-    ws.close(code, "client closed")
-    if (this.accaptor) {
-      this.accaptor.close(code, "peer closed")
+    if (ws === this.initiator) {
+      this.initiator = undefined
+      console.log(`hbbr initiator closed`)
+      this.acceptor?.close(code, "peer closed")
     }
-    if (this.initiator) {
-      this.initiator.close(code, "peer closed")
+    if (ws === this.acceptor) {
+      this.acceptor = undefined
+      console.log(`hbbr accaptor closed`)
+      this.initiator?.close(code, "peer closed")
     }
   }
 
@@ -89,13 +101,13 @@ export class Hbbr extends DurableObject {
     if (this.initiator === socket) {
       return
     }
-    if (!this.accaptor) {
-      this.accaptor = socket
+    if (!this.acceptor) {
+      this.acceptor = socket
       console.log(`setup accaptor for uuid: ${req.uuid} cached msg: ${this.cachedMessagesFromInit.length}`)
       if (this.cachedMessagesFromInit.length > 0) {
         // send cached messages to accaptor
         for (const msg of this.cachedMessagesFromInit) {
-          this.accaptor.send(msg)
+          this.acceptor.send(msg)
         }
         this.cachedMessagesFromInit = []
       }
@@ -187,7 +199,7 @@ export class Hbbs extends DurableObject {
       this.sessions.delete(meta.id)
       console.log(`rendezvous client closed id: ${meta.id} uuid: ${meta.uuid}`)
     }
-    ws.close(code, "client closed")
+    // ws.close(code, "client closed")
   }
 
   sendRendezvous(data: unknown, socket: WebSocket | undefined) {
