@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import * as rendezvous from './hbbs-rendezvous'
-// import * as deskMsg from './hbbs-message'
+import { IdPk } from './hbbs-message'
+import nacl from 'tweetnacl'
 
 export class Hbbr extends DurableObject {
   // In-memory state
@@ -8,6 +9,16 @@ export class Hbbr extends DurableObject {
   acceptor: WebSocket | undefined
   cachedMessagesFromInit: Array<string | ArrayBuffer> = []
   cachedMessagesFromAcceptor: Array<string | ArrayBuffer> = []
+
+  fwdCount = 0
+  // Loggt die ersten Nachrichten pro Relay-Sitzung (Richtung, Laenge), damit
+  // sichtbar wird, ob die Handshake-Frames (SignedId/PublicKey) ankommen.
+  logFwd(dir: string, message: string | ArrayBuffer, how: string) {
+    if (this.fwdCount >= 12) return
+    this.fwdCount++
+    const len = typeof message === 'string' ? message.length : message.byteLength
+    console.log(`hbbr fwd #${this.fwdCount} ${dir} len=${len} ${how}`)
+  }
 
   async warmup(): Promise<void> {
     console.log(`Hbbr warmup called`)
@@ -34,9 +45,11 @@ export class Hbbr extends DurableObject {
       // }
       // message from initiator, forward to acceptor
       if (this.acceptor && this.acceptor.readyState === 1) {
+        this.logFwd('init->acc', message, 'sent')
         this.acceptor.send(message)
       } else {
         // cache the message until accaptor is ready
+        this.logFwd('init->acc', message, 'cached')
         this.cachedMessagesFromInit.push(message)
       }
       return
@@ -48,9 +61,11 @@ export class Hbbr extends DurableObject {
       // }
       // message from acceptor, forward to initiator
       if (this.initiator && this.initiator.readyState === 1) {
+        this.logFwd('acc->init', message, 'sent')
         this.initiator.send(message)
       } else {
         // cache the message until initiator is ready
+        this.logFwd('acc->init', message, 'cached')
         this.cachedMessagesFromAcceptor.push(message)
       }
       return
@@ -121,6 +136,7 @@ export class Hbbs extends DurableObject {
     ip: string,
     id: string,
     uuid: string,
+    pk: Uint8Array,
     socket: WebSocket,
   }> = new Map()
 
@@ -226,6 +242,38 @@ export class Hbbs extends DurableObject {
     console.log(`Handling relay response: ${res.version}`)
   }
 
+  // Signiert eine IdPk{id, pk}-Nachricht mit dem privaten Server-Schluessel
+  // (HBBS_SIGN_SK, base64). Erzeugt das kombinierte NaCl-Signaturformat
+  // (Signatur + Nachricht), das der Client per sodiumoxide::sign::verify()
+  // gegen den im "Key"-Feld hinterlegten oeffentlichen Schluessel prueft.
+  // Gibt null zurueck, wenn nicht signiert werden kann (Secret fehlt/ungueltig).
+  // Der Aufrufer faellt dann auf den rohen, unsignierten Key zurueck UND meldet
+  // dem Pi secure=false - beide Seiten muessen sich ueber den Modus einig sein.
+  signIdPk(targetId: string, targetPk: Uint8Array): Uint8Array | null {
+    const signSk = (this.env as { HBBS_SIGN_SK?: string }).HBBS_SIGN_SK
+    if (!signSk) {
+      console.log('signIdPk: HBBS_SIGN_SK not set, sending unsigned pk')
+      return null
+    }
+    console.log(`signIdPk: id=${targetId} targetPk.length=${targetPk.length} signSk.length=${signSk.length}`)
+    try {
+      const secretKey = Uint8Array.from(atob(signSk), c => c.charCodeAt(0))
+      console.log(`signIdPk: decoded secretKey.length=${secretKey.length} (erwartet: 64)`)
+      if (secretKey.length !== 64) {
+        console.log('signIdPk: UNEXPECTED secretKey length, aborting sign, sending unsigned pk')
+        return null
+      }
+      const idPkBytes = IdPk.toBinary(IdPk.create({ id: targetId, pk: targetPk }))
+      console.log(`signIdPk: idPkBytes.length=${idPkBytes.length} hex=${Array.from(idPkBytes).map(b => b.toString(16).padStart(2, '0')).join('')}`)
+      const signed = nacl.sign(idPkBytes, secretKey)
+      console.log(`signIdPk: signed.length=${signed.length} (erwartet: 64 + ${idPkBytes.length} = ${64 + idPkBytes.length})`)
+      return signed
+    } catch (e) {
+      console.log(`signIdPk: EXCEPTION: ${e}`)
+      return null
+    }
+  }
+
   handlePunchHoleRequest(req: rendezvous.PunchHoleRequest, socket: WebSocket) {
     const targetId = req?.id
     console.log(`Handling punch hole request to id: ${targetId}`)
@@ -264,19 +312,35 @@ export class Hbbs extends DurableObject {
     this.env.HBBR.get(hbbrObjId).warmup()
     const uuid = hbbrObjId.toString()
 
+    // Signieren VOR dem Versand, weil das secure-Flag davon abhaengt.
+    // Der Pi liest rr.secure aus der RequestRelay-Nachricht: nur bei true
+    // sendet er ein SignedId und wartet auf den PublicKey des Clients. Der
+    // Client erwartet diesen Handshake genau dann, wenn der pk in der
+    // RelayResponse gueltig signiert ist. Beide Seiten muessen uebereinstimmen,
+    // sonst laeuft der Handshake auseinander (schwarzes Bild).
+    const signedPk = this.signIdPk(targetId, onlineSession.pk)
+    const secure = signedPk !== null
+    console.log(`handlePunchHoleRequest: secure=${secure} target=${targetId}`)
+
     this.sendRendezvous({
       requestRelay: rendezvous.RequestRelay.create({
         socketAddr: random128bit,
         id: targetId,
         uuid: uuid,
         relayServer: `${relayUrl}/ws/relay/${uuid}`,
+        secure: secure,
       })
     }, onlineSession.socket)
+
     this.sendRendezvous({
       relayResponse: rendezvous.RelayResponse.create({
         uuid: uuid,
         relayServer: `${relayUrl}/ws/relay/${uuid}`,
         version: '1.4.3',
+        union: {
+          oneofKind: 'pk',
+          pk: signedPk ?? onlineSession.pk,
+        },
       })
     }, socket)
   }
@@ -294,11 +358,13 @@ export class Hbbs extends DurableObject {
       ip: meta?.ip || '',
       id: peerId,
       uuid: peerUuid,
+      pk: req.pk,
     })
     this.sessions.set(peerId, {
       ip: meta?.ip || '',
       id: peerId,
       uuid: peerUuid,
+      pk: req.pk,
       socket: socket
     })
     this.sendRendezvous({
